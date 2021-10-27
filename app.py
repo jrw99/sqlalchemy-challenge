@@ -137,42 +137,6 @@ def tobs():
     return jsonify(all_tobs)
 
 
-# @app.route("/api/v1.0/<start>")
-# def start(start):
-
-#     """Return a JSON list of the minimum temperature, the average temperature, and the max temperature for a 
-#     given start or start-end range."""
-
-#     """"When given the start only, calculate TMIN, TAVG, and TMAX for 
-#     all dates greater than and equal to the start date."""
-
-#     if not isValidDate(start, "%Y-%m-%d") :
-#         return jsonify({"error": f"Invalid date submitted. Must be in yyyy-mm-dd format."}), 404
-
-#     # Create our session (link) from Python to the DB
-#     session = Session(engine)
-
-#     results = session.query(func.min(Measurement.tobs).label("min"),\
-#     func.max(Measurement.tobs).label("max"),\
-#     func.avg(Measurement.tobs).label("avg"),
-#     func.count(Measurement.tobs).label("count")).\
-#     filter(Measurement.date >= start).\
-#     order_by(Measurement.date).all()
-
-#     session.close()
-
-#      # Return the JSON representation of your dictionary.  
-#     all_tobs = []
-#     for min, max, avg, cnt in results:
-#         tobs_dict = {}
-#         tobs_dict["min"] = min 
-#         tobs_dict["max"] = max 
-#         tobs_dict["avg"] = avg          
-#         tobs_dict[f"Recordset count for >= {start}"]  = cnt       
-#         all_tobs.append(tobs_dict)
-
-#     return jsonify(all_tobs)
-
 @app.route("/api/v1.0/<start>")
 @app.route("/api/v1.0/<start>/<end>")
 def start_end(start, end=None):

@@ -1,9 +1,19 @@
 import numpy as np
 import sqlalchemy
+import datetime as dt
+from dateutil import parser
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
 from flask import Flask, jsonify
+
+# date validation 
+def isValidDate(date_string, format) :
+    try:
+        dt.datetime.strptime(date_string, format)
+        return True
+    except ValueError:
+        return False
 
 # create engine to hawaii.sqlite
 engine = create_engine("sqlite:///Resources/hawaii.sqlite")
@@ -30,21 +40,19 @@ def welcome():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end>"
+        f"/api/v1.0/&#60;start&#62;<br/>"
+        f"/api/v1.0/&#60;start&#62;/&#60;end&#62;"
     )
 
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
 
+    """Convert the query results to a dictionary using date as the key and prcp as the value."""
+
     # Create our session (link) from Python to the DB
     session = Session(engine)
-
-    """Convert the query results to a dictionary using date as the key and prcp as the value."""
     
-    import datetime as dt
-    from dateutil import parser
     most_recent_date = session.query(Measurement.date).order_by(Measurement.date.desc()).limit(1).all()[0][0]
     most_recent_date = parser.parse(most_recent_date)
     one_year_ago = most_recent_date - dt.timedelta(days=365)
@@ -68,11 +76,12 @@ def precipitation():
 @app.route("/api/v1.0/stations")
 def stations():
 
+    """Return a JSON list of stations from the dataset."""   
+
     # Create our session (link) from Python to the DB
     session = Session(engine)
 
-    """Return a JSON list of stations from the dataset."""   
-    results = session.query(Station).all()
+    results = session.query(Station.id, Station.station, Station.name, Station.latitude, Station.longitude, Station.elevation).all()
 
     session.close()
 
@@ -94,17 +103,15 @@ def stations():
 @app.route("/api/v1.0/tobs")
 def tobs():
 
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
     """Query the dates and temperature observations of the most active station for the last year of data"""   
 
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+    
     station = session.query(Measurement.station, func.count(Measurement.station)).\
     group_by(Measurement.station).\
     order_by(func.count(Measurement.station).desc()).limit(1)[0][0]
 
-    import datetime as dt
-    from dateutil import parser
     most_recent_date = session.query(Measurement.date).order_by(Measurement.date.desc()).limit(1).all()[0][0]
     most_recent_date = parser.parse(most_recent_date)
 
@@ -133,43 +140,35 @@ def tobs():
 @app.route("/api/v1.0/<start>")
 def start(start):
 
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
     """Return a JSON list of the minimum temperature, the average temperature, and the max temperature for a 
     given start or start-end range."""
 
     """"When given the start only, calculate TMIN, TAVG, and TMAX for 
     all dates greater than and equal to the start date."""
 
-    #canonicalized = start.replace(" ", "").lower()
-    #for character in justice_league_members:
-    #    search_term = character["real_name"].replace(" ", "").lower()
+    if not isValidDate(start, "%Y-%m-%d") :
+        return jsonify({"error": f"Invalid date submitted. Must be in yyyy-mm-dd format."}), 404
 
-    #    if search_term == canonicalized:
-    #        return jsonify(character)
-
-    #return jsonify({"error": f"Character with real_name {real_name} not found."}), 404
-
-    #session.query(Dow.date).\
-    #filter(Dow.date >= '2011-03-01').\
-    #order_by(Dow.date).all()
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
 
     results = session.query(func.min(Measurement.tobs).label("min"),\
     func.max(Measurement.tobs).label("max"),\
-    func.avg(Measurement.tobs).label("avg"),\
-    Measurement.date).\
+    func.avg(Measurement.tobs).label("avg"),
+    func.count(Measurement.tobs).label("count")).\
     filter(Measurement.date >= start).\
     order_by(Measurement.date).all()
 
+    session.close()
+
      # Return the JSON representation of your dictionary.  
     all_tobs = []
-    for min, max, avg, date in results:
+    for min, max, avg, cnt in results:
         tobs_dict = {}
         tobs_dict["min"] = min 
         tobs_dict["max"] = max 
-        tobs_dict["avg"] = avg 
-        tobs_dict["date"] = date               
+        tobs_dict["avg"] = avg          
+        tobs_dict[f"Recordset count for >= {start}"]  = cnt       
         all_tobs.append(tobs_dict)
 
     return jsonify(all_tobs)
@@ -178,30 +177,35 @@ def start(start):
 @app.route("/api/v1.0/<start>/<end>")
 def start_end(start, end):
 
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
     """Return a JSON list of the minimum temperature, the average temperature, and the max temperature for a 
     given start or start-end range."""
 
     """"When given the start and the end date, calculate the TMIN, TAVG, and TMAX for dates 
     between the start and end date inclusive."""
 
+    if not isValidDate(start, "%Y-%m-%d") or not isValidDate(end, "%Y-%m-%d") :
+        return jsonify({"error": f"Invalid start/end date submitted. Both must be in yyyy-mm-dd format."}), 404
+
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
     results = session.query(func.min(Measurement.tobs).label("min"),\
     func.max(Measurement.tobs).label("max"),\
     func.avg(Measurement.tobs).label("avg"),\
-    Measurement.date).\
+    func.count(Measurement.tobs).label("count")).\
     filter(Measurement.date >= start, Measurement.date <= end).\
     order_by(Measurement.date).all()
 
+    session.close()
+
      # Return the JSON representation of your dictionary.  
     all_tobs = []
-    for min, max, avg, date in results:
+    for min, max, avg, cnt in results:
         tobs_dict = {}
         tobs_dict["min"] = min 
         tobs_dict["max"] = max 
         tobs_dict["avg"] = avg 
-        tobs_dict["date"] = date               
+        tobs_dict[f"Recordset count between {start} and {end}"]  = cnt              
         all_tobs.append(tobs_dict)
 
     return jsonify(all_tobs)
